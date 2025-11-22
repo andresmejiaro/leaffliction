@@ -181,8 +181,8 @@ def augment_class(class_name, image_paths, target_total_images, output_dir, tran
 
 def split_dataset(class_groups, output_base_dir, train_ratio=0.7, eval_ratio=0.15, test_ratio=0.15):
     """
-    Split images (not groups) into train/eval/test sets.
-    This ensures exact ratio splits by splitting at the IMAGE level.
+    Split groups (not individual images) into train/eval/test sets.
+    Each group (original + transforms) stays together to prevent data leakage.
     """
     train_dir = os.path.join(output_base_dir, "train")
     eval_dir = os.path.join(output_base_dir, "eval")
@@ -191,40 +191,47 @@ def split_dataset(class_groups, output_base_dir, train_ratio=0.7, eval_ratio=0.1
     stats = {"train": 0, "eval": 0, "test": 0}
     
     for class_name, groups in class_groups.items():
-        # Collect ALL images from all groups into a flat list
-        all_images = []
-        for original_path, transform_paths in groups:
-            all_images.append(original_path)
-            all_images.extend(transform_paths)
+        # Shuffle groups (not individual images)
+        random.shuffle(groups)
         
-        # Shuffle the flat list
-        random.shuffle(all_images)
+        total_groups = len(groups)
+        train_count = int(total_groups * train_ratio)
+        eval_count = int(total_groups * eval_ratio)
         
-        total_images = len(all_images)
-        train_count = int(total_images * train_ratio)
-        eval_count = int(total_images * eval_ratio)
+        train_groups = groups[:train_count]
+        eval_groups = groups[train_count:train_count + eval_count]
+        test_groups = groups[train_count + eval_count:]
         
-        train_images = all_images[:train_count]
-        eval_images = all_images[train_count:train_count + eval_count]
-        test_images = all_images[train_count + eval_count:]
-        
-        # Create class directories and copy images
-        for split_dir, split_images, split_name in [
-            (train_dir, train_images, "train"),
-            (eval_dir, eval_images, "eval"),
-            (test_dir, test_images, "test")
+        # Create class directories and copy entire groups together
+        for split_dir, split_groups, split_name in [
+            (train_dir, train_groups, "train"),
+            (eval_dir, eval_groups, "eval"),
+            (test_dir, test_groups, "test")
         ]:
             class_split_dir = os.path.join(split_dir, class_name)
             os.makedirs(class_split_dir, exist_ok=True)
             
-            for img_path in split_images:
+            for original_path, transform_paths in split_groups:
+                # Copy original
                 try:
-                    shutil.copy2(img_path, class_split_dir)
+                    shutil.copy2(original_path, class_split_dir)
                     stats[split_name] += 1
                 except Exception as e:
-                    print(f"    Warning copying {img_path}: {e}")
+                    print(f"    Warning copying original {original_path}: {e}")
+                
+                # Copy all transforms from the same group
+                for transform_path in transform_paths:
+                    try:
+                        shutil.copy2(transform_path, class_split_dir)
+                        stats[split_name] += 1
+                    except Exception as e:
+                        print(f"    Warning copying transform {transform_path}: {e}")
         
-        print(f"  Class '{class_name}': {len(train_images)} train, {len(eval_images)} eval, {len(test_images)} test")
+        train_images = sum(1 + len(tpaths) for _, tpaths in train_groups)
+        eval_images = sum(1 + len(tpaths) for _, tpaths in eval_groups)
+        test_images = sum(1 + len(tpaths) for _, tpaths in test_groups)
+        
+        print(f"  Class '{class_name}': {len(train_groups)} groups ({train_images} images) train, {len(eval_groups)} groups ({eval_images} images) eval, {len(test_groups)} groups ({test_images} images) test")
     
     return stats
 

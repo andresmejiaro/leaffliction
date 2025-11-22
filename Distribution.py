@@ -10,19 +10,29 @@ import plotly.express as px
 def _process_path(p: Path, exts: set) -> dict | None:
     """Helper function to process a single file path."""
     if p.is_file() and p.suffix.lower() in exts:
+        # Extract split from the path (train/eval/test folder)
+        # The structure is: .../train/ClassName/image.jpg or .../eval/ClassName/image.jpg
+        parts = p.parts
+        split = None
+        for i, part in enumerate(parts):
+            if part in ['train', 'eval', 'test']:
+                split = part
+                break
+        
         return {
             "path": str(p.resolve()),
             "name": p.name,
             "class": p.parent.name,
             "stem": p.stem,
             "group": p.stem.split("_g")[0] if "_g" in p.stem else p.stem.split("_")[0],
+            "split": split if split else "unknown",
         }
     return None
 
 def list_images(root: str, max_workers: int = 8) -> pl.DataFrame:
     """
     Recursively scan for images under 'root' using multithreading.
-    Returns a Polars DataFrame with metadata.
+    Returns a Polars DataFrame with metadata including split from path.
     """
     exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
     paths = list(Path(root).rglob("*"))
@@ -40,29 +50,41 @@ def list_images(root: str, max_workers: int = 8) -> pl.DataFrame:
 
 def train_test_val(df: pl.DataFrame) -> pl.DataFrame:
     """
-    Create a train/val/test split at the IMAGE level (not group level).
-    This ensures exact 70/15/15 splits regardless of images per class.
+    Create a train/val/test split at the GROUP level.
+    All images in a group stay together in the same split.
+    This prevents data leakage between splits.
     """
     TRAIN_RATIO = 0.7
     EVAL_RATIO = 0.15
     TEST_RATIO = 0.15
     
-    # Shuffle all rows
-    df_shuffled = df.sample(fraction=1, shuffle=True, seed=42)
+    # Get unique groups per class with their image counts
+    group_info = (
+        df.group_by(["class", "group"])
+        .agg(pl.len().alias("image_count"))
+    )
     
-    # For each class, calculate the split index based on image count
-    df_with_idx = df_shuffled.with_columns([
-        pl.cum_count("path").over("class").alias("idx"),
-        pl.len().over("class").alias("class_total"),
-    ])
+    # Shuffle groups within each class
+    group_shuffled = group_info.sample(fraction=1, shuffle=True, seed=42)
     
-    # Calculate position as fraction
-    df_with_pos = df_with_idx.with_columns(
-        (pl.col("idx") / pl.col("class_total")).alias("position")
+    # Calculate cumulative images and total images per class
+    group_with_cumsum = (
+        group_shuffled
+        .sort(["class", "group"])
+        .with_columns([
+            pl.col("image_count").cum_sum().over("class").alias("cumsum_images"),
+            pl.col("image_count").sum().over("class").alias("total_images"),
+        ])
+    )
+    
+    # Calculate position as fraction of total images
+    group_with_pos = group_with_cumsum.with_columns(
+        (pl.col("cumsum_images") / pl.col("total_images")).alias("position")
     )
     
     # Assign split based on position
-    df_with_split = df_with_pos.with_columns(
+    # Use cumsum position so groups stay together
+    group_with_split = group_with_pos.with_columns(
         pl.when(pl.col("position") <= TRAIN_RATIO)
         .then(pl.lit("train"))
         .when(pl.col("position") <= TRAIN_RATIO + EVAL_RATIO)
@@ -71,21 +93,30 @@ def train_test_val(df: pl.DataFrame) -> pl.DataFrame:
         .alias("split")
     )
     
-    # Keep only necessary columns
-    return df_with_split.select(["path", "name", "class", "stem", "group", "split"])
+    # Keep only group, class, and split
+    group_splits = group_with_split.select(["class", "group", "split"])
+    
+    # Join back to original dataframe to assign split to all images
+    result = df.join(group_splits, on=["class", "group"], how="left")
+    
+    return result
 
 def build_dataset_csv(root: str, out_csv: str, max_workers: int = 8) -> None:
     """
-    Build dataset CSV with metadata and splits.
+    Build dataset CSV with metadata.
+    Split information is extracted from the directory structure (train/eval/test folders).
     """
     print(f"Scanning images in {root}...")
-    x = list_images(root, max_workers=max_workers)
-    print(f"   Found {len(x)} images")
+    df = list_images(root, max_workers=max_workers)
+    print(f"   Found {len(df)} images")
     
-    print("Creating train/eval/test splits...")
-    z = train_test_val(x)
+    # Check if splits were found in paths
+    if "split" in df.columns:
+        unknown_splits = df.filter(pl.col("split") == "unknown")
+        if len(unknown_splits) > 0:
+            print(f"   Warning: {len(unknown_splits)} images have unknown split")
     
-    z.write_csv(out_csv)
+    df.write_csv(out_csv)
     print(f"Dataset CSV saved to {out_csv}")
 
 def visualize_dataset(csv_path: str) -> None:
@@ -123,7 +154,19 @@ def visualize_dataset(csv_path: str) -> None:
             print(f"\n  {split_name.upper()}:")
             split_class_counts = split_df['class'].value_counts().sort_index()
             for class_name, count in split_class_counts.items():
-                print(f"    {class_name}: {count}")
+                class_total = len(pdf[pdf['class'] == class_name])
+                percentage = (count / class_total) * 100
+                print(f"    {class_name}: {count} ({percentage:.1f}%)")
+    
+    # Verify no group leakage
+    print("\nVerifying group integrity...")
+    groups_per_split = pdf.groupby('group')['split'].nunique()
+    leaked_groups = groups_per_split[groups_per_split > 1]
+    if len(leaked_groups) > 0:
+        print(f"  WARNING: {len(leaked_groups)} groups appear in multiple splits!")
+        print(f"  First few leaked groups: {leaked_groups.head().index.tolist()}")
+    else:
+        print(f"  OK: All {len(groups_per_split)} groups are contained in single splits")
     
     print("="*60 + "\n")
     
