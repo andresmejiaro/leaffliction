@@ -7,3 +7,5 @@ Test/
 .train
 *__pycache__*
 #Result/Dataset/*
+/augmented_directory
+/leaves
