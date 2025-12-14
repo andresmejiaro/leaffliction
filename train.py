@@ -3,6 +3,8 @@ from torch.utils.data import DataLoader
 from srcs.Train.data_management import CSVDatasetF3
 from srcs.Train.model_config import ImageMLP
 from srcs.Train.train_loop import train
+from srcs.Train.numbers import target_epochs
+import os
 
 def main():
     # get training data from dataset.csv 
@@ -33,7 +35,7 @@ def main():
         train_loader=train_loader,
         eval_loader=evaluation_loader,
         device=device,
-        epochs=10,
+        epochs=target_epochs,
         lr=1e-3
     )
     print("training done...")
