@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from tabulate import tabulate
+from tqdm import tqdm
 
 def print_test_result(t_loss, e_loss, t_accuracy, e_accuracy, t_sens, e_sens, t_spec, e_spec):
     """
@@ -26,13 +27,18 @@ def loss(model, dataloader, device="cpu"):
     criterion = torch.nn.CrossEntropyLoss()
 
     with torch.no_grad():
-        for batch in dataloader:
+        for batch in tqdm(dataloader):
+            #print("starting loss....")
             x = batch["image"].to(device)
             y = batch["y"].to(device)
             logits = model(x)
+            #print("logits loaded...")
             batch_loss = criterion(logits, y)
+            #print("criterion done...")
             total_loss += batch_loss.item() * x.size(0)
+            #print("batch_loss.item passed....")
             total_samples += x.size(0)
+            #print("batch ended, continuing...")
 
     return total_loss / total_samples if total_samples > 0 else float("nan")
 
