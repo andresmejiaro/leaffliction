@@ -93,3 +93,4 @@ def testing(model, train_loader, eval_loader, device="cpu"):
 
     # Print results
     print_test_result(t_loss, e_loss, t_accuracy, e_accuracy, t_sens, e_sens, t_spec, e_spec)
+    return e_accuracy

@@ -20,5 +20,8 @@ def train(model, train_loader, eval_loader, device, epochs=10, lr=1e-3, save_eve
             torch.save(model.state_dict(), ckpt_path)
             print(f"Checkpoint saved: {ckpt_path}")
 
-        testing(model, train_loader, eval_loader, device)
+        if testing(model, train_loader, eval_loader, device) > 0.95:
+            torch.save(model.state_dict(), ckpt_path)
+            break
+        
         print(f"Epoch {epoch+1} done.")

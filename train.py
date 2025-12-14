@@ -6,12 +6,21 @@ from srcs.Train.train_loop import train
 
 def main():
     # get training data from dataset.csv 
-    training_data = CSVDatasetF3("train", "test.csv", root=".")
-    evaluation_data = CSVDatasetF3("val", "test.csv", root=".")
+    training_data = CSVDatasetF3("train", "dataset.csv", root=".")
+    evaluation_data = CSVDatasetF3("eval", "dataset.csv", root=".")
     print("training data get it")
+    use_pin = torch.cuda.is_available()
 
-    train_loader = DataLoader(training_data, batch_size=16, shuffle=True, num_workers=2, pin_memory=True)
-    evaluation_loader = DataLoader(evaluation_data, batch_size=16, shuffle=True, num_workers=2, pin_memory=True)
+    train_loader = DataLoader(training_data,
+                              batch_size=16,
+                              shuffle=True,
+                              num_workers=2,
+                              pin_memory=use_pin)
+    evaluation_loader = DataLoader(evaluation_data,
+                                   batch_size=16,
+                                   shuffle=True,
+                                   num_workers=2,
+                                   pin_memory=use_pin)
     print("data loaded")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

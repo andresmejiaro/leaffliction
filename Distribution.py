@@ -6,6 +6,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import polars as pl
 import plotly.express as px
+import pandas as pd
 
 def _process_path(p: Path, exts: set) -> dict | None:
     """Helper function to process a single file path."""
@@ -216,15 +217,16 @@ def visualize_dataset(csv_path: str) -> None:
     fig3.show()
     
     # 4. Overall split pie chart
-    print("Generating pie chart by split...")
-    fig4 = px.pie(
-        pdf,
-        names="split",
-        title="Train/Eval/Test Split Distribution",
-        category_orders={"split": ["train", "eval", "test"]},
-        color_discrete_sequence=["#4CAF50", "#FFC107", "#F44336"]
-    )
-    fig4.show()
+    if (pdf["split"] != "unknown").any():
+        print("Generating pie chart by split...")
+        fig4 = px.pie(
+            pdf,
+            names="split",
+            title="Train/Eval/Test Split Distribution",
+            category_orders={"split": ["train", "eval", "test"]},
+            color_discrete_sequence=["#4CAF50", "#FFC107", "#F44336"]
+        )
+        fig4.show()
 
 def main():
     parser = argparse.ArgumentParser(
@@ -284,4 +286,7 @@ def main():
         visualize_dataset(csv_path)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"an error {e} has occured")

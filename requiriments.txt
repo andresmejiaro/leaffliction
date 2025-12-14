@@ -1,7 +1,8 @@
 torchvision
-pytorch
+torch
 polars
 tabulate
 plotly
 pyarrow
 pandas
+tqdm
