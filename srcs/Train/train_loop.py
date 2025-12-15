@@ -45,11 +45,17 @@ def train(model, train_loader, eval_loader, device, epochs=10, lr=1e-3,
 
         if (epoch + 1) % save_every == 0:
             ckpt_path = os.path.join(checkpoint_dir, f"model_epoch{epoch+1}.pt")
+            print("ABOUT TO SAVE:", ckpt_path)
+            print("  model type:", type(model))
+            print("  has .to ?:", hasattr(model, "to"))
             torch.save(model, ckpt_path)
             print(f"Checkpoint saved: {ckpt_path}")
 
         if acc > target_accuracy:
             ckpt_path = os.path.join(checkpoint_dir, "model_best.pt")
+            print("ABOUT TO SAVE:", ckpt_path)
+            print("  model type:", type(model))
+            print("  has .to ?:", hasattr(model, "to"))
             torch.save(model, ckpt_path)
             print(f"Early stop at epoch {epoch+1}, saved best model: {ckpt_path}")
             break

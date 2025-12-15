@@ -1,71 +1,45 @@
-
-# %%
+#%%
 import random
 import torch
 import plotly.express as px
-from torch.utils.data import DataLoader
-from srcs.Train.data_management import CSVDatasetF3
+import numpy as np
+from PIL import Image
 
-#%%
-def visualize_random_sample(model, dataloader, device="cpu", class_names=None):
-    """
-    Pick a random image from a dataloader, run it through the model,
-    and show it with true vs predicted label.
-    
-    Assumes each batch is a dict with:
-        batch["image"] -> tensor [B, C, H, W]
-        batch["y"]     -> tensor [B] with class indices
-    """
+def visualize_random_sample(model, dataloader, device="cpu"):
     device = torch.device(device)
-    model.to(device)
-    model.eval()
+    model.to(device).eval()
 
-    # --- get one random batch ---
     batch = next(iter(dataloader))
-    x = batch["image"].to(device)
-    y_true = batch["y"].to(device)
+    dataset = dataloader.dataset
+    idx_to_class = {i: c for c, i in dataset.class_to_idx.items()}
 
-    # pick random index in this batch
+    x = batch["image"].to(device)     # [B,3,H,W]
+    y = batch["y"]                    # [B]
+    labels = batch["label"]           # list[str]
+    paths = batch["path"]             # list[str]
+
     idx = random.randrange(x.size(0))
 
-    # --- forward pass (no grad needed for viz) ---
+    # --- prediction ---
     with torch.no_grad():
-        logits = model(x[idx:idx+1])          # keep batch dim: [1, C, H, W]
-        pred_class = torch.argmax(logits, dim=1).item()
+        logits = model(x[idx:idx+1])
+        pred_idx = torch.argmax(logits, dim=1).item()
 
-    true_class = y_true[idx].item()
+    true_idx = y[idx].item()
+    true_label = labels[idx]
 
-    # --- build label strings ---
-    if class_names is not None:
-        true_str = f"{true_class} ({class_names[true_class]})"
-        pred_str = f"{pred_class} ({class_names[pred_class]})"
-    else:
-        true_str = str(true_class)
-        pred_str = str(pred_class)
-
-    title = f"Real: {true_str} | Predicted: {pred_str}"
-
-    # --- convert image tensor -> numpy for plotly ---
-    img = x[idx].detach().cpu()               # [C, H, W] on CPU
-
-    # if it’s CHW, move to HWC
-    if img.ndim == 3:
-        img = img.permute(1, 2, 0)           # [H, W, C]
-
-    img_np = img.numpy()
-
-    # if grayscale single-channel, squeeze last dim
-    if img_np.ndim == 3 and img_np.shape[2] == 1:
-        img_np = img_np[:, :, 0]
+    title = f"True: {true_label} | Pred: {idx_to_class[pred_idx]}"
+    # --- load raw image from disk ---
+    img = Image.open(paths[idx]).convert("RGB")
+    img_np = np.array(img)
 
     fig = px.imshow(img_np, title=title)
     fig.update_xaxes(showticklabels=False)
     fig.update_yaxes(showticklabels=False)
     fig.show()
-
 #%%
 
-model = torch.load("model", map_location="cpu")
+model = torch.load("checkpoints/model_epoch2.pt", map_location="cpu", weights_only=False)
 
 
 evaluation_data = CSVDatasetF3("eval", "dataset.csv", root=".")
@@ -83,4 +57,5 @@ CLASS_NAMES = ["1","2","3","4","5","6","8","9"]
 # %%
 
 
-visualize_random_sample(model,evaluation_data)
+visualize_random_sample(model,evaluation_loader)
+# %%

@@ -6,3 +6,4 @@ plotly
 pyarrow
 pandas
 tqdm
+nbformat
