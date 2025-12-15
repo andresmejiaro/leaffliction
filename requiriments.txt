@@ -6,3 +6,7 @@ plotly
 pyarrow
 pandas
 tqdm
+plantcv 
+opencv-python
+matplotlib
+
