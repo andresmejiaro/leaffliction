@@ -1,121 +1,133 @@
+#!/usr/bin/env python3
+
 from plantcv import plantcv as pcv
 import cv2
 import matplotlib.pyplot as plt
+import numpy as np
+import sys
+import os
 
-pcv.params.debug = None  # we control visualization manually
+pcv.params.debug = None
 
-# --------------------------------
-# Read image
-# --------------------------------
-img, _, _ = pcv.readimage("input.jpg")
 
-outputs = {}
+def apply_gaussian_blur(img):
+    return pcv.gaussian_blur(img=img, ksize=(5, 5), sigma_x=0)
 
-# ==============================================
-# 1. Gaussian Blur
-# ==============================================
-blur = pcv.gaussian_blur(img=img, ksize=(5, 5), sigma_x=0)
-outputs["Gaussian Blur"] = blur
 
-# ==============================================
-# 2. Mask (binary)
-# ==============================================
-hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+def create_mask(img):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    lower = np.array([25, 40, 40])
+    upper = np.array([85, 255, 255])
+    mask = cv2.inRange(hsv, lower, upper)
+    mask = pcv.fill(mask, size=50)
+    mask = pcv.erode(mask, ksize=3, i=1)
+    mask = pcv.dilate(mask, ksize=3, i=1)
+    return mask
 
-lower = (25, 40, 40)
-upper = (85, 255, 255)
 
-mask = cv2.inRange(hsv, lower, upper)
-mask = pcv.fill(mask, size=50)
-outputs["Mask"] = mask
+def extract_roi_objects(img, mask):
+    roi = pcv.roi.rectangle(img=img, x=0, y=0, h=mask.shape[0], w=mask.shape[1])
+    
+    filtered_mask = pcv.roi.filter(mask=mask, roi=roi, roi_type="partial")
+    
+    contours, _ = cv2.findContours(
+        filtered_mask,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+    
+    roi_vis = img.copy()
+    if len(contours) > 0:
+        cv2.drawContours(roi_vis, contours, -1, (0, 255, 0), 2)
+    
+    return roi_vis, contours, filtered_mask
 
-# ==============================================
-# 3. ROI Objects (visual)
-# ==============================================
-contours, hierarchy = pcv.find_objects(img, mask)
 
-roi, roi_hierarchy = pcv.roi.rectangle(
-    img=img,
-    x=0,
-    y=0,
-    h=mask.shape[0],
-    w=mask.shape[1]
-)
+def analyze_shape(img, contours, mask):
+    if len(contours) > 0:
+        analysis_img = pcv.analyze.size(img=img, labeled_mask=mask, n_labels=1, label="plant")
+        return analysis_img
+    return img.copy()
 
-roi_objects, _, kept_mask, _ = pcv.roi_objects(
-    img=img,
-    roi_contour=roi,
-    roi_hierarchy=roi_hierarchy,
-    object_contours=contours,
-    obj_hierarchy=hierarchy,
-    roi_type="partial"
-)
 
-roi_vis = pcv.visualize_objects(
-    img=img,
-    objects=roi_objects,
-    mask=kept_mask
-)
-outputs["ROI Objects"] = roi_vis
+def analyze_landmarks(img, mask):
+    if cv2.countNonZero(mask) > 0:
+        try:
+            pl_img = pcv.morphology.check_cycles(mask=mask)
+            return img.copy()
+        except:
+            return img.copy()
+    return img.copy()
 
-# ==============================================
-# 4. Analyze Object (shape traits)
-# ==============================================
-analysis_img = pcv.analyze_object(
-    img=img,
-    obj=roi_objects[0],
-    mask=kept_mask
-)
-outputs["Analyze Object"] = analysis_img
 
-# ==============================================
-# 5. Pseudo-landmarks
-# ==============================================
-pl_img = pcv.analyze_pseudolandmarks(
-    img=img,
-    obj=roi_objects[0],
-    mask=kept_mask,
-    label="plant"
-)
-outputs["Pseudo-landmarks"] = pl_img
+def create_masked_color(img, mask):
+    if cv2.countNonZero(mask) > 0:
+        try:
+            pcv.analyze.color(rgb_img=img, mask=mask, colorspaces="hsv", label="plant")
+            return cv2.bitwise_and(img, img, mask=mask)
+        except:
+            return cv2.bitwise_and(img, img, mask=mask)
+    return img.copy()
 
-# ==============================================
-# 6. Color Histogram (visual)
-# ==============================================
-pcv.analyze_color(
-    img=img,
-    mask=kept_mask,
-    colorspaces="hsv",
-    label="plant"
-)
 
-hist_img = pcv.visualize_color_histograms(
-    label="plant",
-    colorspaces="hsv"
-)
-outputs["Color Histogram"] = hist_img
+def visualize_results(outputs):
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    
+    for ax, (title, image) in zip(axes.flat, outputs.items()):
+        if len(image.shape) == 2:
+            ax.imshow(image, cmap="gray")
+        else:
+            ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        ax.set_title(title, fontsize=12, fontweight='bold')
+        ax.axis("off")
+    
+    plt.tight_layout()
+    plt.show()
 
-# ==============================================
-# Visualization grid
-# ==============================================
-fig, axes = plt.subplots(2, 3, figsize=(18, 10))
 
-for ax, (title, image) in zip(axes.flat, outputs.items()):
-    if len(image.shape) == 2:
-        ax.imshow(image, cmap="gray")
-    else:
-        ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    ax.set_title(title)
-    ax.axis("off")
+def process_image(image_path):
+    if not os.path.exists(image_path):
+        print(f"Error: Image file '{image_path}' not found.")
+        sys.exit(1)
+    
+    print(f"Processing image: {image_path}")
+    
+    img, _, _ = pcv.readimage(image_path)
+    outputs = {}
+    
+    print("Applying transformations...")
+    
+    blur = apply_gaussian_blur(img)
+    outputs["1. Gaussian Blur"] = blur
+    
+    mask = create_mask(blur)
+    outputs["2. Mask"] = mask
+    
+    roi_vis, contours, filtered_mask = extract_roi_objects(img, mask)
+    outputs["3. ROI Objects"] = roi_vis
+    
+    analysis_img = analyze_shape(img, contours, filtered_mask)
+    outputs["4. Analyze Object"] = analysis_img
+    
+    pl_img = analyze_landmarks(img, filtered_mask)
+    outputs["5. Pseudo-landmarks"] = pl_img
+    
+    masked_color = create_masked_color(img, filtered_mask)
+    outputs["6. Masked Color"] = masked_color
+    
+    print("Displaying results...")
+    visualize_results(outputs)
 
-plt.tight_layout()
-plt.show()
 
-'''
-agaussian bluer
-mask
-roi objects
-analyze object
-pseudolandmarks
-color histogram
-'''
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python Transformation.py <image_path>")
+        print("Example: python Transformation.py input.jpg")
+        sys.exit(1)
+    
+    image_path = sys.argv[1]
+    process_image(image_path)
+
+
+if __name__ == "__main__":
+    main()
