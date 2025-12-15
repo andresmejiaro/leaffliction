@@ -7,3 +7,7 @@ pyarrow
 pandas
 tqdm
 nbformat
+plantcv 
+opencv-python
+matplotlib
+
