@@ -9,10 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 import math
 
-# Supported image extensions
 IMG_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".gif")
-
-# Thread-safe printing
 print_lock = Lock()
 
 def thread_safe_print(msg):
@@ -20,49 +17,34 @@ def thread_safe_print(msg):
         print(msg)
 
 def collect_images_by_class(root_path):
-    """
-    Recursively collect images organized by their deepest parent directory (class).
-    Searches at any depth and groups by the immediate parent directory.
-    Returns: dict with class_name -> list of image paths
-    """
     class_images = defaultdict(list)
     
     if not os.path.isdir(root_path):
         print(f"Error: '{root_path}' is not a directory.")
         return class_images
     
-    # Walk through all directories recursively
     for root, dirs, files in os.walk(root_path):
         for file in files:
             if file.lower().endswith(IMG_EXTENSIONS):
                 file_path = os.path.join(root, file)
-                # Use the immediate parent directory as the class name
                 class_name = os.path.basename(root)
                 class_images[class_name].append(file_path)
     
     return class_images
 
 def apply_transformations(img):
-    """
-    Apply all transformations to an image and return a list of transformed images.
-    Returns: list of (transform_name, PIL.Image) tuples
-    """
     transforms = []
     width, height = img.size
     
-    # 1. Flip
     flipped = ImageOps.mirror(img)
     transforms.append(("flip", flipped))
     
-    # 2. Rotate
     rotated = img.rotate(45, expand=True)
     transforms.append(("rotate", rotated))
     
-    # 3. Crop
     cropped = img.crop((width//4, height//4, 3*width//4, 3*height//4))
     transforms.append(("crop", cropped))
     
-    # 4. Shear
     m = -0.5
     xshift = abs(m) * height
     new_width = width + int(round(xshift))
@@ -74,7 +56,6 @@ def apply_transformations(img):
     )
     transforms.append(("shear", sheared))
     
-    # 5. Distortion
     coeffs = [1, 0.2, 0, 0.2, 1, 0]
     distorted = img.transform(img.size, Image.AFFINE, coeffs, resample=Image.BICUBIC)
     transforms.append(("distortion", distorted))
@@ -90,11 +71,9 @@ def process_single_image(args):
     
     try:
         with Image.open(src_path) as img:
-            # Save original
             original_output = os.path.join(output_dir, f"{group_id}_original.jpg")
             img.save(original_output)
             
-            # Create transforms
             transforms = apply_transformations(img)
             transform_paths = []
             
@@ -109,11 +88,6 @@ def process_single_image(args):
         return None
 
 def augment_class(class_name, image_paths, target_total_images, output_dir, transforms_per_image=5, max_workers=4):
-    """
-    Augment images in a class to reach target_total_images exactly.
-    Uses multithreading for faster processing.
-    Returns: list of image groups [(original_path, [transform_paths]), ...]
-    """
     class_output_dir = os.path.join(output_dir, class_name)
     os.makedirs(class_output_dir, exist_ok=True)
     
@@ -121,22 +95,17 @@ def augment_class(class_name, image_paths, target_total_images, output_dir, tran
     random.shuffle(originals)
     num_originals = len(originals)
     
-    # Calculate how many images per group (1 original + N transforms)
     images_per_group = 1 + transforms_per_image
     
-    # Calculate how many groups we need
     num_groups_needed = math.ceil(target_total_images / images_per_group)
     
-    # If we need fewer groups than we have originals, just sample down
     if num_groups_needed <= num_originals:
         selected_originals = originals[:num_groups_needed]
-        # Adjust last group to hit exact target
         full_groups = target_total_images // images_per_group
         remainder = target_total_images % images_per_group
         
         thread_safe_print(f"  Class '{class_name}': Creating {num_groups_needed} groups ({target_total_images} images)")
     else:
-        # We need to cycle through originals multiple times
         selected_originals = []
         for i in range(num_groups_needed):
             selected_originals.append(originals[i % num_originals])
@@ -146,25 +115,20 @@ def augment_class(class_name, image_paths, target_total_images, output_dir, tran
         
         thread_safe_print(f"  Class '{class_name}': Creating {num_groups_needed} groups from {num_originals} originals ({target_total_images} images)")
     
-    # Prepare jobs for thread pool
     jobs = []
     for idx, src_path in enumerate(selected_originals):
         base_name = os.path.splitext(os.path.basename(src_path))[0]
         group_id = f"{base_name}_g{idx}"
         
-        # Determine how many transforms for this group
         if idx < full_groups:
             num_transforms = transforms_per_image
         elif idx == full_groups:
-            # Last partial group (if remainder > 0)
-            num_transforms = max(0, remainder - 1)  # -1 because original counts as 1
+            num_transforms = max(0, remainder - 1)
         else:
-            # No more images needed
             break
         
         jobs.append((src_path, class_output_dir, group_id, num_transforms))
     
-    # Process images in parallel
     image_groups = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(process_single_image, job) for job in jobs]
@@ -180,10 +144,6 @@ def augment_class(class_name, image_paths, target_total_images, output_dir, tran
     return image_groups
 
 def split_dataset(class_groups, output_base_dir, train_ratio=0.7, eval_ratio=0.15, test_ratio=0.15):
-    """
-    Split groups (not individual images) into train/eval/test sets.
-    Each group (original + transforms) stays together to prevent data leakage.
-    """
     train_dir = os.path.join(output_base_dir, "train")
     eval_dir = os.path.join(output_base_dir, "eval")
     test_dir = os.path.join(output_base_dir, "test")
@@ -191,7 +151,6 @@ def split_dataset(class_groups, output_base_dir, train_ratio=0.7, eval_ratio=0.1
     stats = {"train": 0, "eval": 0, "test": 0}
     
     for class_name, groups in class_groups.items():
-        # Shuffle groups (not individual images)
         random.shuffle(groups)
         
         total_groups = len(groups)
@@ -202,7 +161,6 @@ def split_dataset(class_groups, output_base_dir, train_ratio=0.7, eval_ratio=0.1
         eval_groups = groups[train_count:train_count + eval_count]
         test_groups = groups[train_count + eval_count:]
         
-        # Create class directories and copy entire groups together
         for split_dir, split_groups, split_name in [
             (train_dir, train_groups, "train"),
             (eval_dir, eval_groups, "eval"),
@@ -212,14 +170,12 @@ def split_dataset(class_groups, output_base_dir, train_ratio=0.7, eval_ratio=0.1
             os.makedirs(class_split_dir, exist_ok=True)
             
             for original_path, transform_paths in split_groups:
-                # Copy original
                 try:
                     shutil.copy2(original_path, class_split_dir)
                     stats[split_name] += 1
                 except Exception as e:
                     print(f"    Warning copying original {original_path}: {e}")
                 
-                # Copy all transforms from the same group
                 for transform_path in transform_paths:
                     try:
                         shutil.copy2(transform_path, class_split_dir)
@@ -236,7 +192,6 @@ def split_dataset(class_groups, output_base_dir, train_ratio=0.7, eval_ratio=0.1
     return stats
 
 def print_statistics(class_images, class_groups, final_stats):
-    """Print dataset statistics"""
     print("\n" + "="*60)
     print("DATASET STATISTICS")
     print("="*60)
@@ -269,7 +224,6 @@ def main():
     input_dir = sys.argv[1]
     output_dir = "augmented_directory"
     
-    # Create output directory
     if os.path.exists(output_dir):
         response = input(f"Warning: '{output_dir}' already exists. Overwrite? (y/n): ")
         if response.lower() != 'y':
@@ -279,7 +233,6 @@ def main():
     
     os.makedirs(output_dir, exist_ok=True)
     
-    # Collect images by class (recursively at any depth)
     print("Collecting images recursively by class...")
     class_images = collect_images_by_class(input_dir)
     
@@ -289,25 +242,16 @@ def main():
     
     print(f"   Found {len(class_images)} classes")
     
-    # Parameters
     transforms_per_image = 5
-    max_workers = 8  # Number of threads for parallel processing
-    
-    # Find the maximum class size
+    max_workers = 8
     max_class_size = max(len(images) for images in class_images.values())
-    
-    # Target: make all classes the same size as the largest class
     images_per_group = 1 + transforms_per_image
     target_images_per_class = max_class_size * images_per_group
     
     print(f"\nTarget images per class: {target_images_per_class}")
     print(f"Using {max_workers} threads for processing")
-    
-    # Create temporary augmented directory
     temp_augmented_dir = os.path.join(output_dir, "temp_augmented")
     os.makedirs(temp_augmented_dir, exist_ok=True)
-    
-    # Augment each class
     print("\nAugmenting images...")
     class_groups = {}
     for class_name, image_paths in class_images.items():
@@ -321,16 +265,10 @@ def main():
         )
         class_groups[class_name] = groups
     
-    # Split dataset
     print("\nSplitting dataset into train/eval/test...")
     final_stats = split_dataset(class_groups, output_dir, train_ratio=0.7, eval_ratio=0.15, test_ratio=0.15)
-    
-    # Clean up temporary directory
     shutil.rmtree(temp_augmented_dir)
-    
-    # Print statistics
     print_statistics(class_images, class_groups, final_stats)
-    
     print(f"Dataset augmentation and splitting complete!")
     print(f"Output saved to: {os.path.abspath(output_dir)}")
 

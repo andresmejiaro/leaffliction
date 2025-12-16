@@ -24,12 +24,8 @@ def train(model, train_loader, eval_loader, device, epochs=10, lr=1e-3,
             y = batch["y"].to(device)
 
             opt.zero_grad(set_to_none=True)
-
-            # FORWARD PASS (training, no torch.no_grad here!)
-            logits = model(x)                 # [B, C]
-            loss = criterion(logits, y)       # scalar
-
-            # BACKWARD + STEP
+            logits = model(x)
+            loss = criterion(logits, y)
             loss.backward()
             opt.step()
 
@@ -38,8 +34,6 @@ def train(model, train_loader, eval_loader, device, epochs=10, lr=1e-3,
 
         avg_train_loss = running_loss / max(1, total_samples)
         print(f"Epoch {epoch+1} train loss: {avg_train_loss:.4f}")
-
-        # ---- EVAL / CHECKPOINTING ----
         acc = testing(model, train_loader, eval_loader, device)
         print(f"Epoch {epoch+1} metrics -> acc: {acc:.4f}")
 

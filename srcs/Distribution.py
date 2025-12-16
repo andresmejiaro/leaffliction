@@ -9,10 +9,7 @@ import plotly.express as px
 import pandas as pd
 
 def _process_path(p: Path, exts: set) -> dict | None:
-    """Helper function to process a single file path."""
     if p.is_file() and p.suffix.lower() in exts:
-        # Extract split from the path (train/eval/test folder)
-        # The structure is: .../train/ClassName/image.jpg or .../eval/ClassName/image.jpg
         parts = p.parts
         split = None
         for i, part in enumerate(parts):
@@ -31,10 +28,6 @@ def _process_path(p: Path, exts: set) -> dict | None:
     return None
 
 def list_images(root: str, max_workers: int = 8) -> pl.DataFrame:
-    """
-    Recursively scan for images under 'root' using multithreading.
-    Returns a Polars DataFrame with metadata including split from path.
-    """
     exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
     paths = list(Path(root).rglob("*"))
     rows = []
@@ -50,25 +43,16 @@ def list_images(root: str, max_workers: int = 8) -> pl.DataFrame:
     return pl.from_records(rows)
 
 def train_test_val(df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Create a train/val/test split at the GROUP level.
-    All images in a group stay together in the same split.
-    This prevents data leakage between splits.
-    """
     TRAIN_RATIO = 0.7
     EVAL_RATIO = 0.15
     TEST_RATIO = 0.15
     
-    # Get unique groups per class with their image counts
     group_info = (
         df.group_by(["class", "group"])
         .agg(pl.len().alias("image_count"))
     )
     
-    # Shuffle groups within each class
     group_shuffled = group_info.sample(fraction=1, shuffle=True, seed=42)
-    
-    # Calculate cumulative images and total images per class
     group_with_cumsum = (
         group_shuffled
         .sort(["class", "group"])
@@ -77,14 +61,9 @@ def train_test_val(df: pl.DataFrame) -> pl.DataFrame:
             pl.col("image_count").sum().over("class").alias("total_images"),
         ])
     )
-    
-    # Calculate position as fraction of total images
     group_with_pos = group_with_cumsum.with_columns(
         (pl.col("cumsum_images") / pl.col("total_images")).alias("position")
     )
-    
-    # Assign split based on position
-    # Use cumsum position so groups stay together
     group_with_split = group_with_pos.with_columns(
         pl.when(pl.col("position") <= TRAIN_RATIO)
         .then(pl.lit("train"))
@@ -94,24 +73,16 @@ def train_test_val(df: pl.DataFrame) -> pl.DataFrame:
         .alias("split")
     )
     
-    # Keep only group, class, and split
     group_splits = group_with_split.select(["class", "group", "split"])
-    
-    # Join back to original dataframe to assign split to all images
     result = df.join(group_splits, on=["class", "group"], how="left")
     
     return result
 
 def build_dataset_csv(root: str, out_csv: str, max_workers: int = 8) -> None:
-    """
-    Build dataset CSV with metadata.
-    Split information is extracted from the directory structure (train/eval/test folders).
-    """
     print(f"Scanning images in {root}...")
     df = list_images(root, max_workers=max_workers)
     print(f"   Found {len(df)} images")
     
-    # Check if splits were found in paths
     if "split" in df.columns:
         unknown_splits = df.filter(pl.col("split") == "unknown")
         if len(unknown_splits) > 0:
@@ -121,15 +92,10 @@ def build_dataset_csv(root: str, out_csv: str, max_workers: int = 8) -> None:
     print(f"Dataset CSV saved to {out_csv}")
 
 def visualize_dataset(csv_path: str) -> None:
-    """
-    Load dataset CSV and generate histogram + pie chart.
-    Shows distribution by class and by split.
-    """
     print(f"\nLoading dataset from {csv_path}...")
     df = pl.read_csv(csv_path)
     pdf = df.to_pandas()
     
-    # Print statistics
     print("\n" + "="*60)
     print("DATASET STATISTICS")
     print("="*60)
@@ -159,7 +125,6 @@ def visualize_dataset(csv_path: str) -> None:
                 percentage = (count / class_total) * 100
                 print(f"    {class_name}: {count} ({percentage:.1f}%)")
     
-    # Verify no group leakage
     print("\nVerifying group integrity...")
     groups_per_split = pdf.groupby('group')['split'].nunique()
     leaked_groups = groups_per_split[groups_per_split > 1]
@@ -171,7 +136,6 @@ def visualize_dataset(csv_path: str) -> None:
     
     print("="*60 + "\n")
     
-    # 1. Histogram by Class
     print("Generating histogram by class...")
     fig1 = px.histogram(
         pdf, 
@@ -188,7 +152,6 @@ def visualize_dataset(csv_path: str) -> None:
     )
     fig1.show()
     
-    # 2. Pie chart by Class
     print("Generating pie chart by class...")
     fig2 = px.pie(
         pdf, 
@@ -199,7 +162,6 @@ def visualize_dataset(csv_path: str) -> None:
     )
     fig2.show()
     
-    # 3. Stacked bar chart by Split
     print("Generating split distribution...")
     fig3 = px.histogram(
         pdf,
@@ -216,7 +178,6 @@ def visualize_dataset(csv_path: str) -> None:
     )
     fig3.show()
     
-    # 4. Overall split pie chart
     if (pdf["split"] != "unknown").any():
         print("Generating pie chart by split...")
         fig4 = px.pie(
@@ -271,17 +232,12 @@ def main():
     
     csv_path = args.output
     
-    # Graph only mode
     if args.graph_only:
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"[ERROR] CSV file '{csv_path}' not found. Run build first.")
         visualize_dataset(csv_path)
         return
-    
-    # Build dataset CSV
     build_dataset_csv(args.directory, csv_path, max_workers=args.threads)
-    
-    # Visualize unless build_only is set
     if not args.build_only:
         visualize_dataset(csv_path)
 

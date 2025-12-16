@@ -7,7 +7,6 @@ from srcs.Train.numbers import target_epochs
 import os
 
 def main():
-    # get training data from dataset.csv 
     training_data = CSVDatasetF3("train", "dataset.csv", root=".")
     evaluation_data = CSVDatasetF3("eval", "dataset.csv", root=".")
     print("training data get it")
@@ -28,8 +27,6 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = ImageMLP(in_shape=(3,256,256), num_classes=len(training_data.class_to_idx)).to(device)
     print("model setup")
-
-    # FIXED CALL
     train(
         model=model,
         train_loader=train_loader,
