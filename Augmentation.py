@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+from PIL import ImageEnhance
 from PIL import Image, ImageOps, UnidentifiedImageError
 import matplotlib.pyplot as plt
 from typing import Callable
@@ -22,7 +23,7 @@ def apply_flip(img: Image.Image) -> Image.Image:
 
 def apply_rotation(img: Image.Image) -> Image.Image:
     """
-    Return a 45 degree conterclockwise rotated copy of the input image.
+    Return a 45 degree counterclockwise rotated copy of the input image.
 
     Args:
         img: A PIL Image to be rotated
@@ -51,7 +52,7 @@ def apply_shear(img: Image.Image) -> Image.Image:
     """
     Return a sheared copy of the input image.
     The shear is equation is done by
-    x' = 1*x + 0.5*y + xshift
+    x' = 1*x - 0.5*y + xshift
     y' = 0*x + 1*y + 0 (y unaffected)
 
 
@@ -76,16 +77,16 @@ def apply_shear(img: Image.Image) -> Image.Image:
 
 def apply_distortion(img: Image.Image) -> Image.Image:
     """
-    Return a sheared copy of the input image.
-    The shear is equation is done by
+    Return a distorted copy of the input image.
+    The distorted equation is done by
     x' = x + 0.2*y
     y' = 0.2*x + y
 
     Args:
-        img: A PIL Image to be sheared
+        img: A PIL Image to be distorted
 
     Returns:
-        A new PIL sheared image
+        A new PIL distorted image
     """
     coeffs = [1, 0.2, 0, 0.2, 1, 0]
     return img.transform(img.size,
@@ -95,16 +96,15 @@ def apply_distortion(img: Image.Image) -> Image.Image:
 
 def apply_brightness(img: Image.Image) -> Image.Image:
     """
-    Return brigher copy of the input image.
+    Return brighter copy of the input image.
 
-    Ihe brigtness increase is 30%
+    Brightness increase 30%
     Args:
-        img: A PIL Image to be rotated
+        img: A PIL Image
 
     Returns:
-        A new PIL rotated image
+        A new PIL image
     """
-    from PIL import ImageEnhance
     enhancer = ImageEnhance.Brightness(img)
     return enhancer.enhance(1.3)
 
@@ -133,7 +133,7 @@ def get_augmentations() -> list[
 def augment_image(image_path: str, output_dir: str | None = None) -> tuple[
         list[tuple[str, Image.Image]], list[str]]:
     """
-    Creates a augmentation of a single file given by the
+    Creates an augmentation of a single file given by the
     get_augmentations function.
 
 
@@ -142,7 +142,7 @@ def augment_image(image_path: str, output_dir: str | None = None) -> tuple[
     :param output_dir: Description
     :type output_dir: str | None
     :return: Description
-    :rtype: tuple[list[tuple[str, Image]], list[str]]
+    :rtype: tuple[list[tuple[str, Image.Image]], list[str]]
     """
     try:
         with Image.open(image_path) as img:
@@ -168,7 +168,7 @@ def augment_image(image_path: str, output_dir: str | None = None) -> tuple[
 
     for aug_name, aug_func in augmentations:
         aug_img = aug_func(img)
-        output_path = os.path.join(output_dir, f"{base_name}_{aug_name}.jpg")
+        output_path = os.path.join(output_dir, f"{base_name}_{aug_name}.JPG")
         aug_img.save(output_path)
         augmented_images.append((aug_name, aug_img))
         saved_paths.append(output_path)
@@ -244,10 +244,10 @@ def main():
         augmented_images, _ = augment_image(args.image, args.output)
     except FileNotFoundError as e:
         print(f"File {e} not found")
-        sys, exit(1)
+        sys.exit(1)
     except Exception as e:
         print(f"Error {e} occurred")
-        sys, exit(1)
+        sys.exit(1)
 
     if augmented_images:
         print(f"\nCreated {len(augmented_images)} augmented images")
@@ -255,10 +255,10 @@ def main():
             display_augmentations(args.image, augmented_images)
         except FileNotFoundError as e:
             print(f"File {e} not found")
-            sys, exit(1)
+            sys.exit(1)
         except Exception as e:
             print(f"Error {e} occurred")
-            sys, exit(1)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

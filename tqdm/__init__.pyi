@@ -1,0 +1,3 @@
+from typing import Any, Iterable, Iterator
+
+def tqdm(iterable: Iterable[Any], desc: str | None = ...) -> Iterator[Any]: ...

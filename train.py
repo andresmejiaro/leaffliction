@@ -18,10 +18,11 @@ from shared_utils import (
     split_dataset,
     build_csv_from_directory
 )
+from typing import Any, Optional
 
 
 class ImageMLP(nn.Module):
-    def __init__(self, in_shape, num_classes, p_drop=0.2):
+    def __init__(self, in_shape: tuple[int, int, int], num_classes: int, p_drop: float = 0.2) -> None:
         super().__init__()
         c, h, w = in_shape
         self.net = nn.Sequential(
@@ -60,12 +61,19 @@ class ImageMLP(nn.Module):
             nn.Linear(200, num_classes)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
 
 
 class CSVDataset(Dataset):
-    def __init__(self, mask, csv_path, root=".", transforms=None, label_map=None):
+    def __init__(
+        self,
+        mask: str,
+        csv_path: str | Path,
+        root: str | Path = ".",
+        transforms: Optional[Any] = None,
+        label_map: Optional[dict[str, int]] = None,
+    ) -> None:
         self.root = Path(root)
         self.rows = []
 
@@ -93,10 +101,10 @@ class CSVDataset(Dataset):
         else:
             self.transforms = transforms
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.rows)
 
-    def __getitem__(self, i):
+    def __getitem__(self, i: int) -> dict[str, Any]:
         row = self.rows[i]
         path = Path(row["file"]).resolve()
         if not path.exists():
@@ -109,7 +117,9 @@ class CSVDataset(Dataset):
         return {"image": x, "y": y, "label": row["label"], "path": str(path)}
 
 
-def calculate_metrics(model, dataloader, device="cpu"):
+def calculate_metrics(
+    model: nn.Module, dataloader: DataLoader, device: torch.device | str = "cpu"
+) -> tuple[float, float, float]:
     model.eval()
     all_true = []
     all_pred = []
@@ -142,7 +152,7 @@ def calculate_metrics(model, dataloader, device="cpu"):
     return accuracy, sensitivity, specificity
 
 
-def compute_loss(model, dataloader, device="cpu"):
+def compute_loss(model: nn.Module, dataloader: DataLoader, device: torch.device | str = "cpu") -> float:
     model.eval()
     total_loss = 0.0
     total_samples = 0
@@ -160,7 +170,12 @@ def compute_loss(model, dataloader, device="cpu"):
     return total_loss / total_samples if total_samples > 0 else float("nan")
 
 
-def evaluate_model(model, train_loader, eval_loader, device="cpu"):
+def evaluate_model(
+    model: nn.Module,
+    train_loader: DataLoader,
+    eval_loader: DataLoader,
+    device: torch.device | str = "cpu",
+) -> float:
     t_loss = compute_loss(model, train_loader, device)
     e_loss = compute_loss(model, eval_loader, device)
     t_acc, t_sens, t_spec = calculate_metrics(model, train_loader, device)
@@ -178,9 +193,17 @@ def evaluate_model(model, train_loader, eval_loader, device="cpu"):
     return e_acc
 
 
-def train_model(model, train_loader, eval_loader, device, epochs=10,
-                lr=1e-3, save_every=2, checkpoint_dir="./checkpoints",
-                target_accuracy=0.99):
+def train_model(
+    model: nn.Module,
+    train_loader: DataLoader,
+    eval_loader: DataLoader,
+    device: torch.device | str,
+    epochs: int = 10,
+    lr: float = 1e-3,
+    save_every: int = 2,
+    checkpoint_dir: str = "./checkpoints",
+    target_accuracy: float = 0.99,
+) -> None:
     os.makedirs(checkpoint_dir, exist_ok=True)
     model.to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -222,7 +245,7 @@ def train_model(model, train_loader, eval_loader, device, epochs=10,
             break
 
 
-def create_zip_archive(augmented_dir, checkpoint_dir, output_zip):
+def create_zip_archive(augmented_dir: str, checkpoint_dir: str, output_zip: str) -> None:
     with zipfile.ZipFile(output_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, dirs, files in os.walk(augmented_dir):
             for file in files:
@@ -239,7 +262,7 @@ def create_zip_archive(augmented_dir, checkpoint_dir, output_zip):
     print(f"Archive created: {output_zip}")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Train disease classification model"
     )

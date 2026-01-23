@@ -4,16 +4,19 @@ import torch
 import plotly.express as px
 import numpy as np
 from PIL import Image
+from typing import Any
+from torch.utils.data import DataLoader
+from train import CSVDataset
 
-def visualize_random_sample(model, dataloader, device="cpu"):
-    device = torch.device(device)
-    model.to(device).eval()
+def visualize_random_sample(model: torch.nn.Module, dataloader: Any, device: str = "cpu") -> None:
+    torch_device = torch.device(device)
+    model.to(torch_device).eval()
 
     batch = next(iter(dataloader))
     dataset = dataloader.dataset
     idx_to_class = {i: c for c, i in dataset.class_to_idx.items()}
 
-    x = batch["image"].to(device)     # [B,3,H,W]
+    x = batch["image"].to(torch_device)     # [B,3,H,W]
     y = batch["y"]                    # [B]
     labels = batch["label"]           # list[str]
     paths = batch["path"]             # list[str]
@@ -42,7 +45,7 @@ def visualize_random_sample(model, dataloader, device="cpu"):
 model = torch.load("checkpoints/model_epoch2.pt", map_location="cpu", weights_only=False)
 
 
-evaluation_data = CSVDatasetF3("eval", "dataset.csv", root=".")
+evaluation_data = CSVDataset("eval", "dataset.csv", root=".")
 
 use_pin = torch.cuda.is_available()
 

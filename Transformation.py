@@ -6,16 +6,17 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from plantcv import plantcv as pcv
+from typing import Any
 
 
 pcv.params.debug = None
 
 
-def apply_gaussian_blur(img):
+def apply_gaussian_blur(img: np.ndarray) -> np.ndarray:
     return pcv.gaussian_blur(img=img, ksize=(5, 5), sigma_x=0)
 
 
-def create_mask(img):
+def create_mask(img: np.ndarray) -> np.ndarray:
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     lower = np.array([25, 40, 40])
     upper = np.array([85, 255, 255])
@@ -26,7 +27,7 @@ def create_mask(img):
     return mask
 
 
-def extract_roi_objects(img, mask):
+def extract_roi_objects(img: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, list[np.ndarray], np.ndarray]:
     roi = pcv.roi.rectangle(
         img=img, x=0, y=0, h=mask.shape[0], w=mask.shape[1]
     )
@@ -42,7 +43,7 @@ def extract_roi_objects(img, mask):
     return roi_vis, contours, filtered_mask
 
 
-def analyze_shape(img, contours, mask):
+def analyze_shape(img: np.ndarray, contours: list[np.ndarray], mask: np.ndarray) -> np.ndarray:
     if len(contours) > 0:
         analysis_img = pcv.analyze.size(
             img=img, labeled_mask=mask, n_labels=1, label="plant"
@@ -51,7 +52,7 @@ def analyze_shape(img, contours, mask):
     return img.copy()
 
 
-def analyze_landmarks(img, mask):
+def analyze_landmarks(img: np.ndarray, mask: np.ndarray) -> np.ndarray:
     if cv2.countNonZero(mask) > 0:
         try:
             pcv.morphology.check_cycles(mask=mask)
@@ -61,7 +62,7 @@ def analyze_landmarks(img, mask):
     return img.copy()
 
 
-def create_masked_color(img, mask):
+def create_masked_color(img: np.ndarray, mask: np.ndarray) -> np.ndarray:
     if cv2.countNonZero(mask) > 0:
         try:
             pcv.analyze.color(
@@ -73,7 +74,7 @@ def create_masked_color(img, mask):
     return img.copy()
 
 
-def process_single_image(image_path):
+def process_single_image(image_path: str) -> dict[str, np.ndarray]:
     img, _, _ = pcv.readimage(image_path)
     outputs = {}
     
@@ -98,7 +99,7 @@ def process_single_image(image_path):
     return outputs
 
 
-def visualize_results(outputs):
+def visualize_results(outputs: dict[str, np.ndarray]) -> None:
     fig, axes = plt.subplots(2, 3, figsize=(18, 10))
     
     for ax, (title, image) in zip(axes.flat, outputs.items()):
@@ -113,7 +114,7 @@ def visualize_results(outputs):
     plt.show()
 
 
-def save_transformations(outputs, output_dir, base_name):
+def save_transformations(outputs: dict[str, np.ndarray], output_dir: str, base_name: str) -> None:
     os.makedirs(output_dir, exist_ok=True)
     
     for title, image in outputs.items():
@@ -125,7 +126,7 @@ def save_transformations(outputs, output_dir, base_name):
         print(f"Saved: {output_path}")
 
 
-def process_directory(src_dir, dst_dir, mask_mode):
+def process_directory(src_dir: str, dst_dir: str, mask_mode: bool) -> None:
     img_extensions = (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".gif")
     
     for root, dirs, files in os.walk(src_dir):
@@ -142,7 +143,7 @@ def process_directory(src_dir, dst_dir, mask_mode):
                     print(f"Error processing {image_path}: {e}")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Apply plant transformations to images"
     )

@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 import argparse
-import os
 import torch
+from torch import nn
 from PIL import Image
 from torchvision import transforms as T
 import matplotlib.pyplot as plt
+import sys
 
-
-def load_model(model_path):
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model file not found: {model_path}")
+def load_model(model_path: str) ->tuple[nn.Module, torch.device]:
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.load(model_path, map_location=device)
+    try:
+        model = torch.load(model_path, map_location=device)
+    except Exception as e:
+        print(f"Something wrong opening the model in {model_path} Error: {e}")
+        sys.exit(1)
     model.eval()
     return model, device
 
 
-def load_and_preprocess_image(image_path):
-    if not os.path.exists(image_path):
-        raise FileNotFoundError(f"Image file not found: {image_path}")
-    
-    img = Image.open(image_path).convert("RGB")
+def load_and_preprocess_image(image_path: str)-> tuple[Image.Image, torch.Tensor]:
+    try:
+        with Image.open(image_path) as img:    
+            img = img.convert("RGB").copy()
+    except Exception as e:
+        print(f"Something wrong opening the image in {image_path} Error: {e}")
+        sys.exit(1)
+
     
     transform = T.Compose([
         T.Resize((256, 256)),
@@ -33,7 +38,7 @@ def load_and_preprocess_image(image_path):
     return img, img_tensor
 
 
-def predict_disease(model, img_tensor, device, class_names=None):
+def predict_disease(model: nn.Module, img_tensor: torch.Tensor, device: torch.device, class_names: list[str]|None = None)-> tuple[str,float]:
     img_tensor = img_tensor.to(device)
     
     with torch.no_grad():
@@ -50,8 +55,8 @@ def predict_disease(model, img_tensor, device, class_names=None):
     return disease_name, confidence
 
 
-def visualize_prediction(original_img, transformed_img_tensor, disease_name,
-                          confidence):
+def visualize_prediction(original_img: Image.Image, transformed_img_tensor: torch.Tensor, disease_name:str,
+                          confidence: float):
     mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
     std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
     transformed_img = transformed_img_tensor.squeeze(0) * std + mean

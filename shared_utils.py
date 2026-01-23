@@ -10,19 +10,19 @@ from threading import Lock
 from PIL import Image, ImageOps, ImageEnhance
 import csv
 import polars as pl
-
+from typing import Optional, Sequence, Callable, DefaultDict
 
 IMG_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".gif")
 print_lock = Lock()
 
 
-def thread_safe_print(msg):
+def thread_safe_print(msg: str) -> None:
     with print_lock:
         print(msg)
 
 
-def collect_images_by_class(root_path):
-    class_images = defaultdict(list)
+def collect_images_by_class(root_path: str) -> dict[str, list[str]]:
+    class_images: DefaultDict[str, list[str]] = defaultdict(list)
     
     if not os.path.isdir(root_path):
         print(f"Error: '{root_path}' is not a directory.")
@@ -38,44 +38,49 @@ def collect_images_by_class(root_path):
     return class_images
 
 
-def apply_flip(img):
+def apply_flip(img: Image.Image) -> Image.Image:
     return ImageOps.mirror(img)
 
 
-def apply_rotation(img):
+def apply_rotation(img: Image.Image) -> Image.Image:
     return img.rotate(45, expand=True)
 
 
-def apply_crop(img):
+def apply_crop(img: Image.Image) -> Image.Image:
     width, height = img.size
     return img.crop((width//4, height//4, 3*width//4, 3*height//4))
 
 
-def apply_shear(img):
+def apply_shear(img: Image.Image) -> Image.Image:
     width, height = img.size
     m = -0.5
     xshift = abs(m) * height
     new_width = width + int(round(xshift))
     sheared = img.transform(
         (new_width, height),
-        Image.AFFINE,
+        Image.Transform.AFFINE,
         (1, m, -xshift if m > 0 else 0, 0, 1, 0),
-        resample=Image.BICUBIC
+        resample=Image.Resampling.BICUBIC
     )
     return sheared
 
 
-def apply_distortion(img):
+def apply_distortion(img: Image.Image)->Image.Image:
     coeffs = [1, 0.2, 0, 0.2, 1, 0]
-    return img.transform(img.size, Image.AFFINE, coeffs, resample=Image.BICUBIC)
+    return img.transform(
+        img.size,
+        Image.Transform.AFFINE,
+        coeffs,
+        resample=Image.Resampling.BICUBIC,
+    )
 
 
-def apply_brightness(img):
+def apply_brightness(img: Image.Image)-> Image.Image:
     enhancer = ImageEnhance.Brightness(img)
     return enhancer.enhance(1.3)
 
 
-def get_augmentation_transforms():
+def get_augmentation_transforms() -> list[tuple[str, Callable[[Image.Image], Image.Image]]]:
     return [
         ("flip", apply_flip),
         ("rotate", apply_rotation),
@@ -85,7 +90,7 @@ def get_augmentation_transforms():
     ]
 
 
-def process_single_image_augmentation(args):
+def process_single_image_augmentation(args: tuple[str, str, str, int]) -> Optional[tuple[str, list[str]]]:
     src_path, output_dir, group_id, num_transforms = args
     
     try:
@@ -110,8 +115,8 @@ def process_single_image_augmentation(args):
         return None
 
 
-def augment_class(class_name, image_paths, target_total_images,
-                   output_dir, transforms_per_image=5, max_workers=4):
+def augment_class(class_name: str, image_paths: Sequence[str], target_total_images: int,
+                   output_dir: str, transforms_per_image: int = 5, max_workers: int = 4) -> list[tuple[str, list[str]]]:
     class_output_dir = os.path.join(output_dir, class_name)
     os.makedirs(class_output_dir, exist_ok=True)
     
@@ -171,8 +176,8 @@ def augment_class(class_name, image_paths, target_total_images,
     return image_groups
 
 
-def split_dataset(class_groups, output_base_dir,
-                   train_ratio=0.7, eval_ratio=0.15, test_ratio=0.15):
+def split_dataset(class_groups: dict[str, list[tuple[str, list[str]]]], output_base_dir: str,
+                   train_ratio: float = 0.7, eval_ratio: float = 0.15, test_ratio: float = 0.15) -> dict[str, int]:
     train_dir = os.path.join(output_base_dir, "train")
     eval_dir = os.path.join(output_base_dir, "eval")
     test_dir = os.path.join(output_base_dir, "test")
@@ -215,7 +220,7 @@ def split_dataset(class_groups, output_base_dir,
     return stats
 
 
-def _process_path(p: Path, exts: set):
+def _process_path(p: Path, exts: set[str]) -> Optional[dict[str, str]]:
     if p.is_file() and p.suffix.lower() in exts:
         parts = p.parts
         split = None
@@ -237,7 +242,7 @@ def _process_path(p: Path, exts: set):
     return None
 
 
-def build_csv_from_directory(root_dir, output_csv, max_workers=8):
+def build_csv_from_directory(root_dir: str | Path, output_csv: str | Path, max_workers: int = 8) -> pl.DataFrame:
     exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
     paths = list(Path(root_dir).rglob("*"))
     rows = []

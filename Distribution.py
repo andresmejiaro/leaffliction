@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import os
-from pathlib import Path
 from collections import defaultdict
+from typing import DefaultDict
 import plotly.express as px
 import pandas as pd
 
@@ -10,14 +10,14 @@ import pandas as pd
 IMG_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".gif")
 
 
-def collect_images_by_class(root_path):
-    class_images = defaultdict(list)
+def collect_images_by_class(root_path: str)-> DefaultDict[str, list[str]]:
+    class_images: DefaultDict[str, list[str]] = defaultdict(list)
     
     if not os.path.isdir(root_path):
         print(f"Error: '{root_path}' is not a directory.")
         return class_images
     
-    for root, dirs, files in os.walk(root_path):
+    for root, _, files in os.walk(root_path):
         for file in files:
             if file.lower().endswith(IMG_EXTENSIONS):
                 file_path = os.path.join(root, file)
@@ -27,7 +27,7 @@ def collect_images_by_class(root_path):
     return class_images
 
 
-def print_statistics(class_images):
+def print_statistics(class_images: DefaultDict[str, list[str]]):
     print("\n" + "="*60)
     print("DATASET STATISTICS")
     print("="*60)
@@ -39,7 +39,7 @@ def print_statistics(class_images):
     print("="*60 + "\n")
 
 
-def visualize_distribution(class_images, directory_name):
+def visualize_distribution(class_images: DefaultDict[str, list[str]], directory_name: str):
     data = []
     for class_name, images in class_images.items():
         data.append({"Class": class_name, "Count": len(images)})
