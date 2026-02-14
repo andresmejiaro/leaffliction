@@ -1,3 +1,0 @@
-from typing import Any, Iterable
-
-def tabulate(tabular_data: Iterable[Iterable[Any]], headers: Iterable[Any] | None = ..., tablefmt: str | None = ...) -> str: ...

@@ -6,8 +6,17 @@ Test/
 .transformation
 .train
 *__pycache__*
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.pyc
+*.pyo
 #Result/Dataset/*
 /augmented_directory
+/checkpoints/
 /leaves
 /images
 dataset.csv
+trained_model.zip
+en.subject.pdf
