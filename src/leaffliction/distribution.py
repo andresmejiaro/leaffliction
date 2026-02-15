@@ -1,14 +1,12 @@
-#!/usr/bin/env python3
-import argparse
 import os
 from collections import defaultdict
 from typing import DefaultDict
-import plotly.express as px
+
 import pandas as pd
+import plotly.express as px
 
 
 IMG_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".gif")
-
 
 def collect_images_by_class(root_path: str)-> DefaultDict[str, list[str]]:
     class_images: DefaultDict[str, list[str]] = defaultdict(list)
@@ -73,33 +71,3 @@ def visualize_distribution(class_images: DefaultDict[str, list[str]], directory_
         title=f"Class Distribution for {directory_name}"
     )
     fig2.show()
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Analyze and visualize image distribution by class"
-    )
-    parser.add_argument(
-        "directory",
-        type=str,
-        help="Directory containing images organized by class"
-    )
-    
-    args = parser.parse_args()
-    
-    directory_name = os.path.basename(os.path.normpath(args.directory))
-    
-    print(f"Scanning directory: {args.directory}")
-    class_images = collect_images_by_class(args.directory)
-    
-    if not class_images:
-        print("No images found.")
-        return
-    
-    print(f"Found {len(class_images)} classes")
-    print_statistics(class_images)
-    visualize_distribution(class_images, directory_name)
-
-
-if __name__ == "__main__":
-    main()

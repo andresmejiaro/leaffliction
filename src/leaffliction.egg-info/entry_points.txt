@@ -1,0 +1,9 @@
+[console_scripts]
+Augmentation = leaffliction.cli.Augmentation:main
+Distribution = leaffliction.cli.Distribution:main
+Transformation = leaffliction.cli.Transformation:main
+accuracy = leaffliction.cli.accuracy:main
+metrics = leaffliction.cli.metrics:main
+predict = leaffliction.cli.predict:main
+train = leaffliction.cli.train:main
+viewer = leaffliction.cli.viewer:main

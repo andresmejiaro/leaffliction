@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68","wheel"]
+build-backend ="setuptools.build_meta"
+
+[project]
+name = "leaffliction"
+version = "0.1.0"
+description ="leaf disease classification pipeline"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "torchvision",
+    "torch",
+    "tabulate",
+    "plotly",
+    "pyarrow",
+    "pandas",
+    "tqdm",
+    "nbformat",
+    "plantcv", 
+    "opencv-python",
+    "matplotlib"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+Distribution = "leaffliction.cli.Distribution:main"
+Augmentation = "leaffliction.cli.Augmentation:main"
+Transformation = "leaffliction.cli.Transformation:main"
+train = "leaffliction.cli.train:main"
+predict = "leaffliction.cli.predict:main"
+viewer = "leaffliction.cli.viewer:main"
+metrics = "leaffliction.cli.metrics:main"
+accuracy = "leaffliction.cli.accuracy:main"

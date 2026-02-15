@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-import argparse
 import os
-from PIL import ImageEnhance
-from PIL import Image, ImageOps, UnidentifiedImageError
-import matplotlib.pyplot as plt
 from typing import Callable
-import sys
+
+import numpy as np
+import plotly.graph_objects as go
+from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
+from plotly.subplots import make_subplots
 
 
 def apply_flip(img: Image.Image) -> Image.Image:
@@ -144,16 +144,8 @@ def augment_image(image_path: str, output_dir: str | None = None) -> tuple[
     :return: Description
     :rtype: tuple[list[tuple[str, Image.Image]], list[str]]
     """
-    try:
-        with Image.open(image_path) as img:
-            img = img.copy()
-    except FileNotFoundError as e:
-        raise FileNotFoundError(f"Image file not found {image_path}") from e
-    except PermissionError as e:
-        raise PermissionError(
-            f"No permission to read image file {image_path}") from e
-    except UnidentifiedImageError as e:
-        raise ValueError(f"File is not a valid Image {image_path}") from e
+    with Image.open(image_path) as img:
+        img = img.copy()
 
     base_name = os.path.splitext(os.path.basename(image_path))[0]
 
@@ -177,8 +169,7 @@ def augment_image(image_path: str, output_dir: str | None = None) -> tuple[
     return augmented_images, saved_paths
 
 
-def display_augmentations(original_path: str, augmented_images: list[
-        tuple[str, Image.Image]]):
+def display_augmentations(original_path: str, augmented_images:  list[tuple[str, Image.Image]]) -> None:
     """
     Docstring for display_augmentations
     Show augmentation in screen
@@ -189,77 +180,22 @@ def display_augmentations(original_path: str, augmented_images: list[
     :param augmented_images: Description
     :type augmented_images: list[tuple[str, Image.Image]]
     """
-    try:
-        with Image.open(original_path) as original_img:
-            original_img = original_img.copy()
-    except FileNotFoundError as e:
-        raise FileNotFoundError(f"Image file not found {original_path}") from e
-    except PermissionError as e:
-        raise PermissionError(
-            f"No permission to read image file {original_path}") from e
-    except UnidentifiedImageError as e:
-        raise ValueError(f"File is not a valid Image {original_path}") from e
-    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    fig.suptitle(f"Data Augmentations: {os.path.basename(original_path)}")
+    with Image.open(original_path) as original_img:
+        original_img = original_img.copy()
+    subplot_titles = [name.capitalize() for name, _ in augmented_images[:6]]
+    fig = make_subplots(rows=2, cols=3, subplot_titles=subplot_titles)
 
-    for idx, (aug_name, aug_img) in enumerate(augmented_images):
-        row = idx // 3
-        col = idx % 3
-        axes[row, col].imshow(aug_img)
-        axes[row, col].set_title(aug_name.capitalize())
-        axes[row, col].axis('off')
+    for idx, (_, aug_img) in enumerate(augmented_images[:6]):
+        row = idx // 3 + 1
+        col = idx % 3 + 1
+        fig.add_trace(go.Image(z=np.array(aug_img.convert("RGB"))), row=row, col=col)
+        fig.update_xaxes(visible=False, row=row, col=col)
+        fig.update_yaxes(visible=False, row=row, col=col)
 
-    plt.tight_layout()
-    plt.show()
-
-
-def main():
-    """
-    Entry point for the image augmentation CLI.
-
-    Parses command-line arguments, applies a fixed set of data augmentations
-    to the input image, saves the augmented images to disk, and optionally
-    displays the results. All file and image-related errors are handled
-    gracefully to prevent unhandled exceptions.
-    """
-    parser = argparse.ArgumentParser(
-        description="Apply 6 data augmentations to an image"
+    fig.update_layout(
+        title=f"Data Augmentations: {os.path.basename(original_path)}",
+        margin=dict(l=0, r=0, t=60, b=0),
+        height=800,
+        width=1200,
     )
-    parser.add_argument(
-        "image",
-        type=str,
-        help="Path to the image file"
-    )
-    parser.add_argument(
-        "-o", "--output",
-        type=str,
-        default=None,
-        help="Output directory (default: same as input image)"
-    )
-
-    args = parser.parse_args()
-
-    print(f"Augmenting image: {args.image}")
-    try:
-        augmented_images, _ = augment_image(args.image, args.output)
-    except FileNotFoundError as e:
-        print(f"File {e} not found")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error {e} occurred")
-        sys.exit(1)
-
-    if augmented_images:
-        print(f"\nCreated {len(augmented_images)} augmented images")
-        try:
-            display_augmentations(args.image, augmented_images)
-        except FileNotFoundError as e:
-            print(f"File {e} not found")
-            sys.exit(1)
-        except Exception as e:
-            print(f"Error {e} occurred")
-            sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+    fig.show()

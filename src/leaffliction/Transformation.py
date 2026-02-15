@@ -1,15 +1,10 @@
-#!/usr/bin/env python3
-import argparse
 import os
-import sys
+
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from plantcv import plantcv as pcv
-from typing import Any
-
-
-pcv.params.debug = None
+from plotly.subplots import make_subplots
 
 
 def apply_gaussian_blur(img: np.ndarray) -> np.ndarray:
@@ -17,7 +12,7 @@ def apply_gaussian_blur(img: np.ndarray) -> np.ndarray:
 
 
 def create_mask(img: np.ndarray) -> np.ndarray:
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
     lower = np.array([25, 40, 40])
     upper = np.array([85, 255, 255])
     mask = cv2.inRange(hsv, lower, upper)
@@ -100,18 +95,29 @@ def process_single_image(image_path: str) -> dict[str, np.ndarray]:
 
 
 def visualize_results(outputs: dict[str, np.ndarray]) -> None:
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    
-    for ax, (title, image) in zip(axes.flat, outputs.items()):
-        if len(image.shape) == 2:
-            ax.imshow(image, cmap="gray")
+    subplot_titles = [title for title, _ in list(outputs.items())[:6]]
+    fig = make_subplots(rows=2, cols=3, subplot_titles=subplot_titles)
+
+    for idx, (_, image) in enumerate(list(outputs.items())[:6]):
+        row = idx // 3 + 1
+        col = idx % 3 + 1
+        if image.ndim == 2:
+            binary_mask = (image > 0).astype(np.uint8) * 255
+            display_image = cv2.cvtColor(binary_mask, cv2.COLOR_GRAY2RGB)
         else:
-            ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        ax.set_title(title, fontsize=12, fontweight='bold')
-        ax.axis("off")
-    
-    plt.tight_layout()
-    plt.show()
+            display_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        fig.add_trace(go.Image(z=display_image), row=row, col=col)
+        fig.update_xaxes(visible=False, row=row, col=col)
+        fig.update_yaxes(visible=False, row=row, col=col)
+
+    fig.update_layout(
+        title="Transformations",
+        margin=dict(l=0, r=0, t=60, b=0),
+        height=800,
+        width=1200,
+    )
+    fig.show()
 
 
 def save_transformations(outputs: dict[str, np.ndarray], output_dir: str, base_name: str) -> None:
@@ -126,7 +132,7 @@ def save_transformations(outputs: dict[str, np.ndarray], output_dir: str, base_n
         print(f"Saved: {output_path}")
 
 
-def process_directory(src_dir: str, dst_dir: str, mask_mode: bool) -> None:
+def process_directory(src_dir: str, dst_dir: str) -> None:
     img_extensions = (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".gif")
     
     for root, dirs, files in os.walk(src_dir):
@@ -141,57 +147,3 @@ def process_directory(src_dir: str, dst_dir: str, mask_mode: bool) -> None:
                     save_transformations(outputs, dst_dir, base_name)
                 except Exception as e:
                     print(f"Error processing {image_path}: {e}")
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Apply plant transformations to images"
-    )
-    parser.add_argument(
-        "image",
-        type=str,
-        nargs="?",
-        help="Path to single image file"
-    )
-    parser.add_argument(
-        "-src", "--source",
-        type=str,
-        help="Source directory containing images"
-    )
-    parser.add_argument(
-        "-dst", "--destination",
-        type=str,
-        help="Destination directory for transformed images"
-    )
-    parser.add_argument(
-        "-mask",
-        action="store_true",
-        help="Apply mask transformations"
-    )
-    
-    args = parser.parse_args()
-    
-    if args.source and args.destination:
-        if not os.path.isdir(args.source):
-            print(f"Error: Source directory '{args.source}' not found.")
-            sys.exit(1)
-        print(f"Processing directory: {args.source}")
-        process_directory(args.source, args.destination, args.mask)
-        print(f"Transformations saved to: {args.destination}")
-    
-    elif args.image:
-        if not os.path.exists(args.image):
-            print(f"Error: Image file '{args.image}' not found.")
-            sys.exit(1)
-        print(f"Processing image: {args.image}")
-        outputs = process_single_image(args.image)
-        print("Displaying results...")
-        visualize_results(outputs)
-    
-    else:
-        parser.print_help()
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
