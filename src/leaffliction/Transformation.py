@@ -47,14 +47,83 @@ def analyze_shape(img: np.ndarray, contours: list[np.ndarray], mask: np.ndarray)
     return img.copy()
 
 
+def _contour_center(contour: np.ndarray) -> tuple[int, int] | None:
+    moments = cv2.moments(contour)
+    if moments["m00"] == 0:
+        return None
+    cx = int(moments["m10"] / moments["m00"])
+    cy = int(moments["m01"] / moments["m00"])
+    return cx, cy
+
+
+def _draw_landmark(
+    image: np.ndarray,
+    point: tuple[int, int],
+    label: str,
+    color: tuple[int, int, int],
+) -> None:
+    cv2.circle(image, point, 6, color, -1)
+    cv2.putText(
+        image,
+        label,
+        (point[0] + 8, point[1] - 8),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.5,
+        color,
+        1,
+        cv2.LINE_AA,
+    )
+
+
 def analyze_landmarks(img: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    if cv2.countNonZero(mask) > 0:
-        try:
-            pcv.morphology.check_cycles(mask=mask)
-            return img.copy()
-        except Exception:
-            return img.copy()
-    return img.copy()
+    if cv2.countNonZero(mask) == 0:
+        return img.copy()
+
+    landmark_img = img.copy()
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return landmark_img
+
+    contour = max(contours, key=cv2.contourArea)
+    cv2.drawContours(landmark_img, [contour], -1, (255, 255, 0), 2)
+
+    leftmost = tuple(contour[contour[:, :, 0].argmin()][0])
+    rightmost = tuple(contour[contour[:, :, 0].argmax()][0])
+    topmost = tuple(contour[contour[:, :, 1].argmin()][0])
+    bottommost = tuple(contour[contour[:, :, 1].argmax()][0])
+
+    for label, point in {
+        "L": leftmost,
+        "R": rightmost,
+        "T": topmost,
+        "B": bottommost,
+    }.items():
+        _draw_landmark(landmark_img, point, label, (0, 255, 255))
+
+    center = _contour_center(contour)
+    if center is not None:
+        _draw_landmark(landmark_img, center, "C", (255, 255, 255))
+
+    try:
+        skeleton = pcv.morphology.skeletonize(mask=mask)
+        pruned_skeleton, _, _ = pcv.morphology.prune(skeleton, size=5, mask=mask)
+        if cv2.countNonZero(pruned_skeleton) > 0:
+            skeleton = pruned_skeleton
+        tip_mask = pcv.morphology.find_tips(skeleton)
+
+        landmark_img[skeleton > 0] = (0, 255, 0)
+        tip_contours, _ = cv2.findContours(
+            tip_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        for tip_index, tip_contour in enumerate(tip_contours, start=1):
+            tip_center = _contour_center(tip_contour)
+            if tip_center is None:
+                continue
+            _draw_landmark(landmark_img, tip_center, f"P{tip_index}", (255, 0, 0))
+    except Exception:
+        pass
+
+    return landmark_img
 
 
 def create_masked_color(img: np.ndarray, mask: np.ndarray) -> np.ndarray:

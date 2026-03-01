@@ -64,11 +64,82 @@ def build_inference_transform(
 
 def _extract_label_mappings(metadata: dict[str, Any]) -> tuple[dict[str, int], dict[int, str]]:
     class_to_idx_raw = metadata.get("class_to_idx", {})
-    if not isinstance(class_to_idx_raw, dict):
-        return {}, {}
-    class_to_idx = {str(class_name): int(index) for class_name, index in class_to_idx_raw.items()}
-    idx_to_class = {index: class_name for class_name, index in class_to_idx.items()}
-    return class_to_idx, idx_to_class
+    idx_to_class_raw = metadata.get("idx_to_class", {})
+
+    idx_to_class: dict[int, str] = {}
+    if isinstance(idx_to_class_raw, dict):
+        idx_to_class = {
+            int(index): str(class_name)
+            for index, class_name in idx_to_class_raw.items()
+        }
+
+    if isinstance(class_to_idx_raw, dict) and class_to_idx_raw:
+        class_to_idx = {
+            str(class_name): int(index)
+            for class_name, index in class_to_idx_raw.items()
+        }
+        if not idx_to_class:
+            idx_to_class = {
+                index: class_name
+                for class_name, index in class_to_idx.items()
+            }
+        return class_to_idx, idx_to_class
+
+    if idx_to_class:
+        class_to_idx = {
+            class_name: index
+            for index, class_name in idx_to_class.items()
+        }
+        return class_to_idx, idx_to_class
+
+    classes_raw = metadata.get("classes", [])
+    if isinstance(classes_raw, (list, tuple)) and classes_raw:
+        class_names = [str(class_name) for class_name in classes_raw]
+        class_to_idx = {
+            class_name: index
+            for index, class_name in enumerate(class_names)
+        }
+        idx_to_class = {
+            index: class_name
+            for class_name, index in class_to_idx.items()
+        }
+        return class_to_idx, idx_to_class
+
+    return {}, {}
+
+
+def _extract_model_attrs(
+    model: nn.Module,
+) -> tuple[dict[str, Any], dict[int, str]]:
+    metadata: dict[str, Any] = {}
+
+    class_to_idx_raw = getattr(model, "class_to_idx", None)
+    if isinstance(class_to_idx_raw, dict) and class_to_idx_raw:
+        metadata["class_to_idx"] = {
+            str(class_name): int(index)
+            for class_name, index in class_to_idx_raw.items()
+        }
+
+    idx_to_class_raw = getattr(model, "idx_to_class", None)
+    if isinstance(idx_to_class_raw, dict) and idx_to_class_raw:
+        metadata["idx_to_class"] = {
+            int(index): str(class_name)
+            for index, class_name in idx_to_class_raw.items()
+        }
+
+    preprocess_raw = getattr(model, "preprocess", None)
+    if isinstance(preprocess_raw, dict) and preprocess_raw:
+        metadata["preprocess"] = preprocess_raw
+
+    metadata["model"] = {
+        "name": type(model).__name__,
+        "in_shape": getattr(model, "in_shape", None),
+        "num_classes": getattr(model, "num_classes", None),
+        "p_drop": getattr(model, "p_drop", None),
+    }
+
+    _, idx_to_class = _extract_label_mappings(metadata)
+    return metadata, idx_to_class
 
 
 def _load_model_from_artifact(
@@ -105,7 +176,7 @@ def load_model_bundle(
     requested_device: str | None = None,
 ) -> tuple[nn.Module, torch.device, dict[int, str], dict[str, Any]]:
     device = resolve_device(requested_device)
-    checkpoint = torch.load(model_path, map_location=device)
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
 
     metadata: dict[str, Any] = {}
     idx_to_class: dict[int, str] = {}
@@ -113,6 +184,7 @@ def load_model_bundle(
         model, metadata, idx_to_class = _load_model_from_artifact(checkpoint)
     elif isinstance(checkpoint, nn.Module):
         model = checkpoint
+        metadata, idx_to_class = _extract_model_attrs(model)
     else:
         raise ValueError("Unsupported checkpoint format. Use a .pt or .artifact.pt checkpoint.")
 
@@ -200,6 +272,10 @@ def visualize_prediction(
 
 def resolve_model_path(model_path: str) -> str:
     path = Path(model_path)
+    if str(path).endswith(".pt") and not str(path).endswith(".artifact.pt"):
+        artifact_path = path.with_name(f"{path.stem}.artifact.pt")
+        if artifact_path.is_file():
+            return str(artifact_path)
     if path.is_file():
         return str(path)
 
@@ -208,6 +284,10 @@ def resolve_model_path(model_path: str) -> str:
         fallback = model_path.replace(artifact_suffix, ".pt")
         if Path(fallback).is_file():
             return fallback
+    elif model_path.endswith(".pt"):
+        artifact_path = model_path[:-3] + ".artifact.pt"
+        if Path(artifact_path).is_file():
+            return artifact_path
     raise FileNotFoundError(f"Model checkpoint not found: {model_path}")
 
 

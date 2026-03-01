@@ -496,6 +496,9 @@ def train_model(
             "normalize_std": list(DEFAULT_NORMALIZE_STD),
         },
     }
+    model.class_to_idx = dict(class_to_idx)
+    model.idx_to_class = dict(metadata["idx_to_class"])
+    model.preprocess = dict(metadata["preprocess"])
     metrics_history: list[dict[str, int | float]] = []
 
     for epoch in range(epochs):
